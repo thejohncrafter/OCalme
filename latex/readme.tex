@@ -1,0 +1,294 @@
+\documentclass[french]{article}
+\usepackage[a4paper]{geometry}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\usepackage[french]{babel}
+
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{turnstile}
+\usepackage{stmaryrd}
+
+\title{\emph{OCalme}\\Outil de Compilation Avancé pour Langage Machine\\(mais En fait c'est du python)}
+\author{Julien Marquet}
+
+\begin{document}
+
+\newcommand\setccl{\mathcal{C}}
+\newcommand\setrul{\mathcal{R}}
+\newcommand\setder{\mathcal{D}}
+
+\newcommand\opnextder{\mathit{Cons}}
+
+\maketitle
+\tableofcontents{}
+
+\section{Utilisation}
+
+Un exemple de programme est contenu dans \verb|example.oklm|. \\
+Essayez :
+\begin{itemize}
+  \item \verb|python3 main.py example.oklm|
+    pour lancer le programme écrit dans \verb|example.oklm|.
+  \item \verb|python3 main.py -h| pour obtenir de l'aide.
+  \item \verb|python3 main.py example.oklm --norun --ast|
+    pour avoir une représentation lisible de l'AST généré
+    sans exécuter le programme.
+    \item \verb|python3 main.py example.oklm --norun --ir|
+      pour avoir une représentation lisible de l'IR généré
+      sans exécuter le programme.
+  \item \verb|python3 main.py example.oklm --norun --gen|
+    pour avoir le code généré sans exécuter le programme.
+\end{itemize}
+
+\section{Structure d'un programme}
+
+Détaillons la structure d'un programme en nous fondant sur quelques exemples.
+
+\subsection{La fonction "main"}
+
+\begin{lstlisting}
+fn main: void -> void {
+  print("Hello world !")
+}
+\end{lstlisting}
+
+\paragraph{} Le "Hello world !" en OCalme ! \\
+Ici, rien de bien surprenant. La fonction \verb|main| est celle qui
+est appelée en première au moment du lancement du programme.
+Elle ne prend aucun argument, et ne renvoie rien, d'où son type
+\verb|void -> void|. Le nom "\verb|void|" est directement repris de
+\verb|C|, et sert à signaler qu'une fonction ne prend pas d'arguments
+ou n'en renvoie pas. \\
+La syntaxe des appels de fonctions n'est pas surprenante non plus, elle
+est calquée sur celle de \verb|C| (et de nombreux autres langages).
+
+\paragraph{} Notons simplement le type de la fonction \verb|print| :
+\verb|String -> void|.
+
+\subsection{Variables}
+
+\begin{lstlisting}
+fn exemple_avec_des_variables: void -> void {
+  let t = 0;
+  t = t + 1;
+  let (t, u) = {
+    let v = t + 4;
+    (2, 3*v)
+  }
+}
+\end{lstlisting}
+
+\paragraph{} La syntaxe \verb|let ... = ...| est explicite. On assigne
+au membre de gauche (la "lvalue") la valeur du membre de droite (la
+"rvalue"). \\
+Notons tout de même que :
+\begin{itemize}
+  \item On peut assigner plusieurs variables en même temps. \\
+  En fait, les "lvalues" peuvent être des variables, ou des n-uplets
+  de lvalues : un n-uplet s'écrit, en Ocalme :
+  \verb|(<élément 1>, ..., <élement n>)|
+  où les parenthèses sont obligatoires (on ne peut pas, comme on peut
+  le faire en Python, écrire : \verb|a, b = b, a|, mais il faut
+  écrire : \verb|(a, b) = (b, a)|).
+
+  \item Les blocs de code \emph{sont des rvalues}. La valeur d'un bloc
+  est alors la valeur retournée par sa dernière expression, comme
+  dans l'exemple. \\
+  Ce comportement est copié sur celui du langage \verb|Rust|.
+\end{itemize}
+
+\subsection{Fonctions de plusieurs variables, typage des fonctions}
+
+\begin{lstlisting}
+fn plusieurs_variables:
+  (a: Integer)
+  -> (b: Integer)
+  -> (Integer, Integer) {
+  (b, a)
+}
+\end{lstlisting}
+
+\paragraph{} La syntaxe des fonctions de plusieurs variables est,
+cette fois-ci, un peu plus... créative. \\
+On peut la voir comme un mélange de la syntaxe des types de \verb|Caml|
+et de la convention d'écrire, lorsque la variable \verb|v| est de type
+\verb|T|: \verb|v: T|. \\
+Les différents couples \verb|<variable>: <Type>| doivent être entourés
+de parenthèses (comme dans l'exemple), on sépare les différentes variables
+par des flèches "\verb|->|", et l'élément qui suit la dernière flèche
+est le type de retour de la fonction. \\
+Ici, la valeur retournée par la fonction est un couple d'entiers, noté
+\verb|(Integer, Integer)|.
+
+\subsection{Structures de contrôle}
+
+\begin{lstlisting}
+
+\paragraph{} Voici une fonction qui calcule la somme des n premiers
+entiers naturels.
+
+fn structures_de_controle: (n: Integer) -> Integer {
+  let t = 0;
+  let acc = 0;
+  loop {
+    if (t = n) then {
+      break acc
+    };
+    t = t + 1;
+    acc = acc + t
+  }
+}
+\end{lstlisting}
+
+\paragraph{} Cette fonction utilise les deux structures de contrôle
+de OCalme. \\
+Leurs principes sont clairs, mais notons que :
+\begin{itemize}
+  \item Un \verb|if| s'attend à recevoir un booléen. Ici, le test
+  \verb|(t = n)| a un type booléen. Le symbole \verb|=| teste l'égalité
+  des deux termes qui lui sont donnés.
+
+  \item Une boucle \verb|loop| peut renvoyer une valeur. Pour cela,
+  il suffit de mettre une rvalue après \verb|break|, comme dans l'exemple.
+
+  \item Les structures de contrôle étant des rvalues, elles doivent
+  être succédées d'un point-virgule lorsqu'elles n'occupent pas la
+  dernière position dans un bloc.
+\end{itemize}
+
+\subsection{La syntaxe "if unwrap" et les "box"}
+
+Voici, on l'attendait tous, la fonction \verb|rev| :
+
+\begin{lstlisting}
+fn rev: (li: List(GenericBox<T>))
+  -> (base: List(GenericBox<T>))
+  -> List(GenericBox<T>) {
+  let acc = base;
+  let top = li;
+
+  loop {
+    if unwrap top on (x, t) then {
+      top = t;
+    } else {
+      break acc
+    }
+  }
+}
+\end{lstlisting}
+
+\paragraph{} Cette fonction utilise la syntaxe "\verb|if unwrap|". \\
+\begin{lstlisting}
+if unwrap <box> on <lvalue> then rvalue else rvalue
+\end{lstlisting}
+où \verb|<box>| est un objet de type "Box". Ce est l'équivalent d'un
+pointeur. Une \verb|box(T)| peut être vide (éqivalent du pointeur nul),
+ou remplie, et, lorsqu'elle est remplie, contient un objet du type
+\verb|T| : les \verb|box| sont des types génériques -- même si
+la généricité n'est supportée que de façon très superficielle en OCalme.
+
+\paragraph{Généricité} OCalme permet d'introduire des types génériques,
+mais cette fonctionnalité n'a pas réellement été développée. On pourra
+se contenter de noter qu'un objet de type \verb|GenericBox<T>| représente
+une \verb|box| dont on ne connaît pas le type du contenu. La seule
+garantie que l'on a est que toutes les occurences de \verb|GenericBox<T>|
+dans la signature d'une même fonction seront considérées du même type,
+et que les fonctions génériques "se comportent bien" du côté de la
+fonction appelante.
+
+\section{Données}
+
+Les types de donnés représentant l'AST et l'IR sont tous équipés d'une fonction
+\verb|pretty| qui est faite pour générer des messages à la fois lisibles et
+reflétant les données contenues par la structure sur laquelle elle a été
+appelée. \\
+Les options \verb|--ast| et \verb|--ir| de \verb|main.py| utilisent cette fonction pour
+afficher les structures de données générées. \\
+On peut se référer aux messages produits par
+\verb|python3 main.py example.oklm|
+pour comprendre la signification des structures de données.
+
+\section{Algorithme}
+
+Le compilateur est séparé en plusieurs "étages" :
+On récupère le programme dans le fichier donné en argument (sous forme de
+chaîne de caractères), puis on effectue les étapes ci-dessous.
+
+\subsection{Parsing}
+
+C'est la construction de l'AST ("Abstract Syntax Tree"). \\
+Les fichiers contenant les algorithmes sont \verb|parse_util.py|, \verb|parseBlock.py|,
+\verb|parseFunction.py|, \verb|parseLRValue.py|, \verb|PrecedenceBuilder.py|
+et \verb|Tokenizer.py|. \\
+Les définitions des types de données de l'AST sont dans \verb|AST.py|. \\
+Le principe général est qu'un fichier OCalme est structuré en :
+\begin{itemize}
+ \item{fonctions (\verb|parseFunction.py|)} \\
+ représentées par leurs paramètres et un bloc de code :
+ \begin{itemize}
+ \item blocs (\verb|parseBlock.py|)
+   contiennent des commandes (assignements, ou simplement des calculs).
+   \begin{itemize}
+   \item{commandes :} Les commandes sont composées d'éventuellement un symbole
+     spécial (le symbole \verb|=|, pour l'assignement), et de :
+     \begin{itemize}
+     \item{lvalues :} Ce sont les valeurs qui peuvent se trouver à gauche dans
+       une égalité, c'est à dire des variables ou des n-uplets.
+     \item{rvalues :} Les valeurs qui peuvent se trouver à droite d'un symbole
+       \verb|=|. Les variables et les n-uplets sont bien sûr des rvalues, mais
+       aussi les structures \verb|if|, \verb|loop| et \verb|if unwrap|; et les blocs de
+       code.
+     \end{itemize}
+     Le fichier concerné est \verb|parseLRValue|. \\
+     L'algorithme contenu dans ce fichier est en fait capable de parser
+     des lvalues \emph{et} des rvalues. En fait, les lvalues sont des cas
+     particuliers de rvalues (ce sont les rvalues uniquement composées
+     de variables et de n-uplets de lvalues).
+   \end{itemize}
+  \end{itemize}
+\end{itemize}
+
+\subsection{Flattening}
+
+Après que l'AST a été construit, on peut générer une représentation
+intermédiaire (\verb|IR|, \verb|Intermediate Representation|) qui est plus facile
+à manipuler par un programme (le but étant que la transpilation vers
+Python soit triviale). \\
+On profite de cette étape pour vérifier que le programme est bien typé. \\
+\paragraph{Remarque} Il semble, d'après la taille du fichier \verb|flattener.py| et la
+complexité des algorithmes qu'il contient, qu'il aurait été plus sage de
+réserver la vérification des types à une autre étape de la compilation...
+
+\subsection{Transpilation}
+
+On transforme l'IR en un programme Python. L'algorithme est dans
+\verb|transpile.py|. Il est assez simple, et montre comment utiliser les
+structures de données générées par le Flattener.
+
+\section{Que lire ?}
+
+\paragraph{} Le fichier \verb|transpile.py| contient la source du
+transpilateur, qui transforme l'IR en du code Python. Il est assez
+court et montre bien comment interpréter l'IR. \\
+On peut par exemple comparer le résultat de
+\verb|python3 main.py example.oklm --norun --ir|
+et celut de \verb|python3 main.py example.oklm --norun --gen|,
+sachant que la transformation réalisée est effectuée par
+\verb|transpile.py| (à un détail près : les fonctions \verb|wrapper|
+et \verb|mkBoxId| sont toutes deux générées dans \verb|OklmRunner.py|).
+
+\paragraph{} On peut aussi lire \verb|OklmRunner.py| qui fait l'interface
+entre le parseur, le Flattener et le transpilateur.
+
+\paragraph{} Les fichiers \verb|AST.py| et \verb|FlatIR.py| contiennent
+les définitions des structures de données qui composent l'AST et l'IR,
+on peut les survoler pour voir ce que ces structures contiennent. Le
+plus intéressant est de comparer ces deux fichiers aux résultats de
+\verb|python3 main.py example.oklm --norun --ast| et de
+\verb|python3 main.py example.oklm --norun --ir|.
+
+\end{document}

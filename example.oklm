@@ -1,0 +1,121 @@
+
+fn int_to_digit: (i: Integer) -> String {
+  # Cette fonction donne un résultat cocasse après compilation :
+  # le compilateur ("flattener") n'optimise pas les "if ... else",
+  # donc on obtient une série de "if" imbriqués.
+
+  # "else if" n'est pas une "séquence réservée" du langage
+  # (contraitement à "if unwrap").
+  # Le parseur s'attend à rencontrer une "rvalue" (i.e. une valeur
+  # qu'on peut mettre à droite d'une égalité) après "else", or
+  # un block "if ..." est bel et bien une rvalue !
+  if (i = 0) then "0"
+  else if (i = 1) then "1"
+  else if (i = 2) then "2"
+  else if (i = 3) then "3"
+  else if (i = 4) then "4"
+  else if (i = 5) then "5"
+  else if (i = 6) then "6"
+  else if (i = 7) then "7"
+  else if (i = 8) then "8"
+  else if (i = 9) then "9"
+  else "0"
+}
+
+fn int_to_string: (i: Integer) -> String {
+  # On peut créer plusieurs variables en même temps.
+  let (neg, out) = ((i < 0), "");
+
+  if neg then {i = (0-i)};
+
+  loop {
+    # loop est aussi une rvalue.
+    # "break" permet renvoyer une valeur dans une boucle !
+    if (i <= 0) then {
+      # "break" est ici suivi d'une rvalue.
+      # C'est illisible, mais ça marche.
+      break if neg then "-" @ out else out
+    };
+    let r = 0;
+    (i, r) = {
+      # Les blocs sont aussi des rvalues, on peut donc
+      # réaliser n'importe quelle opération à droite d'une égalité
+      # (et aussi dans une expression arithmétique, etc.), pour peu
+      # qu'on emballe le tout dans un bloc "{ ... }".
+      let j = i/10;
+      (j, i - 10*j)
+    };
+    out = int_to_digit(r) @ out;
+  }
+}
+
+fn rev: (li: List(GenericBox<T>))
+  -> (base: List(GenericBox<T>))
+  -> List(GenericBox<T>) {
+  # On ne peut (pour l'instant) pas créer des "Box" d'un type générique
+  # donc on demande à l'utilisateur de donner une "base" pour la
+  # liste à renverser (l'utilisateur devait donner la liste vide.)
+  let acc = base;
+  let top = li;
+
+  loop {
+    if unwrap top on (x, t) then {
+      acc = cons x, acc;
+      top = t;
+    } else {
+      # On renvoie "acc", et on s'évite la tâche
+      # fastidieuse (et quasi-insurmontable) d'ajouter
+      # une ligne de code à la fin pour répéter "acc"
+      # (de toute façon, "return" n'est pas implémenté...).
+      break acc
+    }
+  }
+}
+
+fn pop: (li: List(GenericBox<T>)) -> List(GenericBox<T>) {
+  # On enlève la valeur en haut de la pile donnée.
+  if unwrap li on (x, t) then t else li
+}
+
+fn print_list: (li: List(Box(String))) -> void {
+  # Les "Box" sont les équivalents des pointeurs.
+  # Il est possible d'avoir des boîtes "vides", c'est l'équivalent
+  # d'un pointeur nul.
+  let top = li;
+  let built = "";
+
+  loop {
+    if unwrap top on (strbox, t)
+    then {
+      # La syntaxe "if unwrap" peut paraître peu claire,
+      # mais le principe est simple:
+      # ici, on "déballe" la boîte "strbox" sur la variable "str"
+      # si cette boîte n'est pas vide. Si elle est vide, on exécute
+      # la branche "else".
+      if unwrap strbox on str then {
+        built = built @ str
+      } else {
+          built = built @ "(null)"
+      };
+      top = t
+    } else {break}
+};
+
+    print(built)
+}
+
+fn main: void -> void {
+  # Cette fonction sera la première appelée.
+
+  # Écriture d'un nombre :
+  # print(int_to_string(0-185));
+
+  let base = cons empty: Box(String);
+
+  let list = base;
+  list = cons wrap "REMOVE ME", list;
+  list = cons wrap "Hello ", list;
+  list = cons wrap "world !", list;
+
+  print_list(pop(rev(list, base)));
+}
